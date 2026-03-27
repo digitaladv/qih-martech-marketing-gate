@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { CONFIG, validateConfig } from "./config.js";
-import { securityHeaders, rateLimit, auditLog } from "./security.js";
+import { securityHeaders, originCheck, rateLimit, auditLog } from "./security.js";
 import { setupAuthRoutes } from "./auth.js";
 import { setupVerifyRoute } from "./verify.js";
 import { setupAdminRoutes } from "./admin.js";
@@ -23,9 +23,10 @@ setupVerifyRoute(app);
 app.use("/auth/*", rateLimit(30, 60_000));
 setupAuthRoutes(app);
 
-// Admin routes (rate-limited)
+// Admin routes (rate-limited + CSRF protection)
 app.use("/admin", rateLimit(30, 60_000));
 app.use("/api/*", rateLimit(60, 60_000));
+app.use("/api/*", originCheck);
 setupAdminRoutes(app);
 
 // Start
