@@ -6,15 +6,32 @@ import { isApiExempt, isHostProtected, registerHost } from "./store.js";
 
 const AUTH_HOST = new URL(CONFIG.SERVER_URL).hostname;
 
+// Derive the expected domain suffix from COOKIE_DOMAIN or SERVER_URL
+// e.g. ".marketing.qih-tech.com" → "marketing.qih-tech.com"
+const EXPECTED_DOMAIN = CONFIG.COOKIE_DOMAIN
+  ? CONFIG.COOKIE_DOMAIN.replace(/^\./, "")
+  : new URL(CONFIG.SERVER_URL).hostname;
+
+/** Normalise host: strip www. prefix */
+function normaliseHost(raw: string): string {
+  return raw.startsWith("www.") ? raw.slice(4) : raw;
+}
+
+/** Only auto-discover hosts under the expected domain */
+function isOwnDomain(host: string): boolean {
+  return host === EXPECTED_DOMAIN || host.endsWith(`.${EXPECTED_DOMAIN}`);
+}
+
 // Cap auto-discovered hosts to prevent store flooding via crafted headers
 const MAX_AUTO_DISCOVERED = 200;
 let autoDiscoveredCount = 0;
 
 export function setupVerifyRoute(app: Hono) {
   app.get("/verify", async (c) => {
-    const host = (c.req.header("x-forwarded-host") || "")
+    const rawHost = (c.req.header("x-forwarded-host") || "")
       .split(":")[0]
       .toLowerCase();
+    const host = normaliseHost(rawHost);
     const proto = c.req.header("x-forwarded-proto") || "https";
     const uri = c.req.header("x-forwarded-uri") || "/";
 
@@ -31,8 +48,12 @@ export function setupVerifyRoute(app: Hono) {
     // Check if host is known and its protection status
     const status = isHostProtected(host);
 
-    // Unknown host → auto-register as protected (with cap to prevent abuse)
+    // Unknown host → auto-register only if it belongs to our domain
     if (!status.known && host) {
+      if (!isOwnDomain(host)) {
+        auditLog("host_rejected_foreign", { host, rawHost });
+        return c.text("Forbidden", 403);
+      }
       if (autoDiscoveredCount < MAX_AUTO_DISCOVERED) {
         registerHost(host);
         autoDiscoveredCount++;
