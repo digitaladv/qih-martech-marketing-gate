@@ -20,6 +20,12 @@ export const CONFIG = {
   COOKIE_NAME: env("COOKIE_NAME", "qm_session"),
   COOKIE_MAX_AGE: 86400, // 24h
   SUPER_ADMIN: env("SUPER_ADMIN", "alessandro.moretti@quantum.media"),
+  // Full URL to the analytics MCP server endpoint (used to build the
+  // claude_desktop_config.json snippet on /auth/mcp-token).
+  MCP_SERVER_URL: env(
+    "MCP_SERVER_URL",
+    "https://analytics-mcp.marketing.qih-tech.com/mcp",
+  ),
   NODE_ENV: env("NODE_ENV", "development"),
   get isDev() {
     return this.NODE_ENV === "development";

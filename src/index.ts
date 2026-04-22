@@ -1,10 +1,18 @@
-import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import { CONFIG, validateConfig } from "./config.js";
-import { securityHeaders, originCheck, rateLimit, auditLog } from "./security.js";
-import { setupAuthRoutes } from "./auth.js";
-import { setupVerifyRoute } from "./verify.js";
+import { Hono } from "hono";
 import { setupAdminRoutes } from "./admin.js";
+import { setupAuthRoutes } from "./auth.js";
+import { CONFIG, validateConfig } from "./config.js";
+import { setupMcpTokenRoutes } from "./mcp-token.js";
+import { setupOAuthRoutes, startCodeCleanup } from "./oauth.js";
+import { setupOAuthMetadataRoute } from "./oauth-metadata.js";
+import {
+  auditLog,
+  originCheck,
+  rateLimit,
+  securityHeaders,
+} from "./security.js";
+import { setupVerifyRoute } from "./verify.js";
 
 validateConfig();
 
@@ -19,9 +27,18 @@ app.get("/health", (c) => c.json({ status: "ok", service: "quantum-gate" }));
 // ForwardAuth endpoint (called by Traefik — must be fast, no rate limit)
 setupVerifyRoute(app);
 
+// OAuth metadata (RFC 8414) — public, cacheable, no rate limit
+setupOAuthMetadataRoute(app);
+
 // Auth routes (rate-limited)
 app.use("/auth/*", rateLimit(30, 60_000));
 setupAuthRoutes(app);
+setupMcpTokenRoutes(app);
+
+// OAuth 2.1 authorize + token endpoints (rate-limited)
+app.use("/oauth/*", rateLimit(60, 60_000));
+setupOAuthRoutes(app);
+startCodeCleanup();
 
 // Admin routes (rate-limited + CSRF protection)
 app.use("/admin", rateLimit(30, 60_000));
