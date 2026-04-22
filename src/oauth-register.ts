@@ -99,15 +99,21 @@ export function setupOAuthRegisterRoute(app: Hono) {
         400,
       );
     }
+    // Clients (notably Claude) include "refresh_token" in the requested grants
+    // alongside "authorization_code". We don't issue refresh tokens today (24h
+    // JWT, user re-auths), but rejecting the DCR here would block the whole
+    // flow. Accept both and signal authorization_code only in the response so
+    // a spec-compliant client knows refresh isn't actually available.
+    const allowedGrants = new Set(["authorization_code", "refresh_token"]);
     if (
       body.grant_types &&
-      !body.grant_types.every((g) => g === "authorization_code")
+      !body.grant_types.every((g) => allowedGrants.has(g))
     ) {
       return c.json(
         {
           error: "invalid_client_metadata",
           error_description:
-            "Only authorization_code grant is supported",
+            "Only authorization_code and refresh_token grants are permitted",
         },
         400,
       );
