@@ -176,11 +176,19 @@ export function setupOAuthRoutes(app: Hono) {
 
     // Require an authenticated QG session. If absent, bounce through the
     // existing Google SSO flow and come back to this exact authorize URL.
+    //
+    // Use a relative path (not c.req.url) so the login redirect stays on the
+    // current scheme+host. Behind Traefik, c.req.url reports the proxy-
+    // internal http:// scheme — wrapping that in the redirect param causes
+    // the browser to follow http:// after login, triggering a Traefik
+    // https-upgrade 301 that can drop the OAuth state param mid-flight and
+    // break Claude Desktop's callback.
     const session = await parseSession(c);
     if (!session) {
-      const originalUrl = c.req.url;
+      const parsed = new URL(c.req.url);
+      const relativePath = parsed.pathname + parsed.search;
       return c.redirect(
-        `/auth/login?redirect=${encodeURIComponent(originalUrl)}`,
+        `/auth/login?redirect=${encodeURIComponent(relativePath)}`,
       );
     }
 
